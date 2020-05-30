@@ -1,4 +1,3 @@
-use std::char;
 use std::env;
 
 use firrtl_rust::tokenizer::tokenize;
@@ -12,7 +11,7 @@ fn main() {
     }
 
     let tokens = tokenize(args.nth(1).unwrap());
-    let node = Node::expr(tokens);
+    let node = Node::parse(&tokens);
 
     let out_tmp = node.gen();
     println!("  assign out = {};", out_tmp);

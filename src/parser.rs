@@ -5,13 +5,36 @@ use std::char;
 
 static mut REG_TMP_IDX: u32 = 0;
 
+#[derive(Debug, Clone, PartialEq)]
 enum NodeType {
     Num, // Number literal
+    Plus,
+    Minus,
+    Mul,
 }
+
+
+impl From<TokenType> for NodeType {
+    fn from(token_type: TokenType) -> Self {
+        match token_type {
+            TokenType::Num => NodeType::Num,
+            TokenType::Plus => NodeType::Plus,
+            TokenType::Minus => NodeType::Minus,
+            TokenType::Mul => NodeType::Mul,
+        }
+    }
+}
+
+impl Default for NodeType {
+    fn default() -> Self {
+        NodeType::Num
+    }
+}
+
 
 #[derive(Default, Debug, Clone)]
 pub struct Node {
-    ty: i32, // Node type
+    ty: NodeType, // Node type
     lhs: Option<Box<Node>>, // left-hand side
     rhs: Option<Box<Node>>, // right-hand side
     val: i32, // Number literal
@@ -19,7 +42,7 @@ pub struct Node {
 
 
 impl Node {
-    fn new(op: i32, lhs: Box<Node>, rhs: Box<Node>) -> Self {
+    fn new(op: NodeType, lhs: Box<Node>, rhs: Box<Node>) -> Self {
         Self {
             ty: op,
             lhs: Some(lhs),
@@ -30,61 +53,82 @@ impl Node {
 
     fn new_num(val: i32) -> Self {
         Self {
-            ty: NodeType::Num as i32,
+            ty: NodeType::Num,
             val: val,
             ..Default::default()
         }
     }
 
     fn create_num(tokens: &Vec<Token>, pos: usize) -> Self {
-        if tokens[pos].ty == TokenType::Num as i32 {
+        if tokens[pos].ty == TokenType::Num {
             let val = tokens[pos].val;
             return Self::new_num(val);
         }
         panic!("number expected, but got {}", tokens[pos].input);
     }
 
-    pub fn expr(tokens: Vec<Token>) -> Self {
-        print!("module main (\n");
-        print!("  output logic [31: 0] out\n");
-        print!(");\n");
 
-        let mut pos_idx = 0;
-        let mut lhs = Self::create_num(&tokens, pos_idx);
-        pos_idx += 1;
-        while pos_idx != tokens.len() {
-            match char::from_u32(tokens[pos_idx].ty as u32) {
-                Some('+') => {
-                    if tokens[pos_idx+1].ty != TokenType::Num as i32 {
-                        fail(&tokens, pos_idx+1);
-                    }
-                    lhs = Self::new(tokens[pos_idx].ty, Box::new(lhs), Box::new(Self::create_num(&tokens, pos_idx+1)));
-                    pos_idx += 2;
-                }
-                Some('-') => {
-                    if tokens[pos_idx+1].ty != TokenType::Num as i32 {
-                        fail(&tokens, pos_idx+1);
-                    }
-                    lhs = Self::new(tokens[pos_idx].ty, Box::new(lhs), Box::new(Self::create_num(&tokens, pos_idx+1)));
-                    pos_idx += 2;
-                }
-                _ => {
-                    fail(&tokens, pos_idx);
-                }
+    fn mul(tokens: &Vec<Token>, mut pos: usize) -> (Self, usize) {
+        let mut lhs = Self::create_num(&tokens, pos);
+        pos += 1;
+
+        loop {
+            if tokens.len() == pos {
+                return (lhs, pos);
             }
-        }
 
-        if tokens.len() != pos_idx {
-            panic!("stray token: {}", tokens[pos_idx].input);
+            let op = tokens[pos].ty.clone();
+            if op != TokenType::Mul {
+                return (lhs, pos);
+            }
+            pos += 1;
+            lhs = Self::new(
+                NodeType::from(op),
+                Box::new(lhs),
+                Box::new(Self::create_num(&tokens, pos)),
+            );
+            pos += 1;
         }
-        return lhs;
     }
 
+
+    pub fn expr(tokens: &Vec<Token>, pos: usize) -> (Self, usize) {
+        let (mut lhs, mut pos) = Self::mul(&tokens, pos);
+
+        loop {
+            if tokens.len() == pos {
+                return (lhs, pos);
+            }
+
+            let op = tokens[pos].ty.clone();
+            if op != TokenType::Plus && op != TokenType::Minus {
+                return (lhs, pos);
+            }
+            pos += 1;
+            let (rhs, new_pos) = Self::mul(&tokens, pos);
+            pos = new_pos;
+            lhs = Self::new(NodeType::from(op), Box::new(lhs), Box::new(rhs));
+        }
+    }
+
+    pub fn parse(tokens: &Vec<Token>) -> Self {
+        let (node, pos) = Self::expr(tokens, 0);
+
+        if tokens.len() != pos {
+            panic!("stray token: {}", tokens[pos].input);
+        }
+        return node;
+    }
 
     // Code generator
     pub fn gen(self) -> String {
 
-        if self.ty == NodeType::Num as i32 {
+        print!("module main (\n");
+        print!("  output logic [31: 0] out\n");
+        print!(");\n");
+
+
+        if self.ty == NodeType::Num {
             unsafe {
                 let new_tmp = format!("{}{}", "tmp", REG_TMP_IDX.to_string());
                 println!("  logic [31: 0] {};", format!("{}", new_tmp));

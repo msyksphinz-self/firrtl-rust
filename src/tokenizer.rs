@@ -1,13 +1,37 @@
 use std::process::exit;
 
+// Tokenizer
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
     Num, // Number literal
+    Plus,
+    Minus,
+    Mul,
 }
+
+impl From<char> for TokenType {
+    fn from(c: char) -> Self {
+        match c {
+            '+' => TokenType::Plus,
+            '-' => TokenType::Minus,
+            '*' => TokenType::Mul,
+            e => panic!("unknow Token type: {}", e),
+        }
+    }
+}
+
+
+impl Default for TokenType {
+    fn default() -> Self {
+        TokenType::Num
+    }
+}
+
 
 // Token type
 #[derive(Default, Debug)]
 pub struct Token {
-    pub ty: i32, // Token type
+    pub ty: TokenType, // Token type
     pub val: i32, // Number literal
     pub input: String, // Token string (for error reporting)
 }
@@ -51,9 +75,9 @@ pub fn tokenize(mut p: String) -> Vec<Token> {
         }
 
         // + or -
-        if c == '+' || c == '-' {
+        if c == '+' || c == '-' || c == '*' {
             let token = Token {
-                ty: c as i32,
+                ty: TokenType::from(c),
                 input: org.clone(),
                 ..Default::default()
             };
@@ -67,7 +91,7 @@ pub fn tokenize(mut p: String) -> Vec<Token> {
             let (n, remaining) = strtol(&p);
             p = remaining;
             let token = Token {
-                ty: TokenType::Num as i32,
+                ty: TokenType::Num,
                 input: org.clone(),
                 val: n.unwrap() as i32,
             };
